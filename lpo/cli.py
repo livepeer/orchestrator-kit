@@ -297,7 +297,7 @@ print(json.dumps({"ok": bool(streams) and int(streams[0].get("nb_read_frames", 0
 
 
 def check_contract(env: Env, cfg: dict) -> Result:
-    code, out = env.run("docker", "compose", "exec", "-T", "hyperframes", "python3", "-", input=CONTRACT_PROBE, timeout=300)
+    code, out = env.run("docker", "compose", "exec", "-T", "hyperframes", "python", "-", input=CONTRACT_PROBE, timeout=300)
     try:
         res = json.loads(out.strip().splitlines()[-1])
     except (ValueError, IndexError):
