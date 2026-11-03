@@ -231,3 +231,9 @@ def test_register_is_a_dry_run_unless_submit_and_checks_the_stake(node, capsys):
     assert "--submit" not in args and "https://node.example.org" in args and args[args.index("-v") + 1].endswith(":ro")
     assert "Dry run only" in capsys.readouterr().out
     assert cli.cmd_register(node, "800", True, "100", "100", env) == 0 and "--submit" in env.calls[-1]
+
+
+def test_rpc_url_file_with_a_newline_is_caught(node):
+    (node / "secrets" / "arbitrum-rpc-url").write_text("https://arb1.example/rpc\n")
+    r = cli.check_keystore(cli.Env(node), cli.load_config(node))
+    assert not r.ok and "newline" in r.measured

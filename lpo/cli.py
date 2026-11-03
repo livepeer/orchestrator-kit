@@ -205,6 +205,10 @@ def check_keystore(env: Env, cfg: dict) -> Result:
     missing = [f for f in SECRET_FILES if not (sd / f).exists() or (sd / f).stat().st_size == 0]
     if missing:
         return Result("chain.keystore", False, f"missing: {', '.join('secrets/' + m for m in missing)}")
+    rpc = (sd / "arbitrum-rpc-url").read_text()
+    if rpc != rpc.strip():
+        return Result("chain.keystore", False, "secrets/arbitrum-rpc-url has a trailing newline or spaces; the node rejects it",
+                      ["rewrite it with: printf %s 'https://…' > secrets/arbitrum-rpc-url"])
     loose = [f for f in SECRET_FILES if (sd / f).stat().st_mode & 0o077]
     try:
         addr = "0x" + json.loads((sd / "wallet-keystore").read_text())["address"].lower().removeprefix("0x")
