@@ -15,5 +15,9 @@ Times are UTC on 2026-11-03. "Manual" means a step a community operator would al
 | 04:05 | H3 | public Arbitrum RPC returns 403 without a User-Agent | — | Kit bug, fixed in `lpo` (8d935a0) |
 | 04:06 | H3 | new non-blocking check `chain.service_uri` warns when the on-chain URI names another host | — | covers "second host for an existing orchestrator" |
 | 04:06 | H2 | doctor: stage 2/7, 7 blocking; its "Next step" points at container logs, though the real blocker is the missing wallet files | — | finding: next step should follow the root cause (`chain.keystore`) |
+| 04:20 | H2 | owner decision: do not share the livebit.ca key; pilot uses a fresh wallet. VM `lpo.yaml` reset to the zero address | owner | |
+| 04:25 | H3 (read only) | active set 100/100, lowest stake 610.2 LPT, top 4.53 M LPT; round length 6,377 L1 blocks (~21 h); unbonding 7 rounds | — | so a fresh operator needs ~1,000 LPT plus ~0.01 ETH |
+| 04:30 | H2/H3 | node image ships `livepeer-chain` (no `livepeer_cli`): `account create` and `orchestrator register` (approve+bond+register+service URI, dry run by default) | — | Kit gains `lpo wallet` and `lpo register` on top of it (8c3c5d7) |
+| 04:35 | H3 | smoke on the VM with a throwaway, unfunded key (deleted): create works; register dry run stops at "insufficient Livepeer token balance" | — | finding: an RPC URL file with a trailing newline is rejected; doctor now catches it (538ad6b) |
 
-Waiting on the owner: decide how this address is shared with livebit.ca (see plan §4.1), then place the keystore, password and RPC files on the VM (H2).
+Waiting on the owner: `lpo wallet` on the VM (H2), then fund the address and `lpo register` (H3).
