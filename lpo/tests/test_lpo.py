@@ -18,8 +18,9 @@ PROBE_OK = json.dumps({"ok": True, "elapsed_ms": 4100, "stream": {"codec_name": 
 
 
 class FakeEnv(cli.Env):
-    def __init__(self, workdir, *, discovery=DISCOVERY, active=True, running=True, ips=("34.1.2.3",), probe=PROBE_OK):
+    def __init__(self, workdir, *, discovery=DISCOVERY, active=True, running=True, ips=("34.1.2.3",), probe=PROBE_OK, service_uri="https://node.example.org"):
         super().__init__(workdir)
+        self.service_uri = service_uri
         self.discovery, self.active, self.running, self.ips, self.probe = discovery, active, running, ips, probe
 
     def run(self, *args, input=None, timeout=60):
@@ -44,6 +45,9 @@ class FakeEnv(cli.Env):
     def eth_call(self, rpc, to, data):
         if data.startswith(cli._selector("getContract(bytes32)")):
             return "0x" + "0" * 24 + "35bcf3c30594191d53231e4ff333e8a770453e40"
+        if data.startswith(cli._selector("getServiceURI(address)")):
+            uri = self.service_uri.encode()
+            return "0x" + (32).to_bytes(32, "big").hex() + len(uri).to_bytes(32, "big").hex() + uri.ljust(32 * ((len(uri) + 31) // 32), b"\0").hex()
         return "0x" + ("1" if self.active else "0").rjust(64, "0")
 
 
@@ -89,7 +93,7 @@ def test_render_writes_the_kit_and_never_the_wallet(tmp_path):
 def test_ready_node_exits_zero_with_a_clean_report(node, capsys):
     assert cli.cmd_doctor(node, FakeEnv(node)) == 0
     md, js = latest_report(node)
-    assert js["stage"] == "published" and js["passed"] == js["total"] == 13
+    assert js["stage"] == "published" and js["passed"] == js["total"] == 14
     assert "Ready to publish." in capsys.readouterr().out
 
 
@@ -148,3 +152,11 @@ def test_reports_never_contain_secrets(node):
     text = (d / "report.md").read_text() + (d / "report.json").read_text()
     assert "KEY" not in text and "pw" not in text.split()
     assert cli.redact("token=abc https://arb-mainnet.g.alchemy.com/v2/KEY") == "token=[redacted] [redacted-rpc-url]"
+
+
+def test_service_uri_elsewhere_is_a_warning_not_a_block(node, capsys):
+    assert cli.cmd_doctor(node, FakeEnv(node, service_uri="https://livebit.ca:8935")) == 2
+    md, js = latest_report(node)
+    su = next(c for c in js["checks"] if c["id"] == "chain.service_uri")
+    assert su["ok"] and su["warn"] and "livebit.ca" in su["measured"] and js["stage"] == "published"
+    assert "## ! chain.service_uri" in md

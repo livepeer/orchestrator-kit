@@ -85,7 +85,7 @@ class Env:
 
     def eth_call(self, rpc_url: str, to: str, data: str) -> str | None:
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call", "params": [{"to": to, "data": data}, "latest"]}).encode()
-        req = urllib.request.Request(rpc_url, data=body, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(rpc_url, data=body, headers={"Content-Type": "application/json", "User-Agent": "lpo-doctor"})
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 return json.loads(resp.read()).get("result")
@@ -234,6 +234,25 @@ def check_active(env: Env, cfg: dict) -> Result:
     return Result("chain.active", active, "active this round" if active else "not in the active set this round", [f"BondingManager {bm_addr}"])
 
 
+def check_service_uri(env: Env, cfg: dict) -> Result:
+    """Warn when the on-chain service URI points elsewhere: fine for a second host, but say so."""
+    rpc_file = env.workdir / "secrets" / "arbitrum-rpc-url"
+    if not rpc_file.exists():
+        return Result("chain.service_uri", False, "no RPC URL yet (see chain.keystore)", warn=True)
+    rpc, controller = rpc_file.read_text().strip(), VOCAB["policy"]["arbitrum_controller"]
+    sr = env.eth_call(rpc, controller, _selector("getContract(bytes32)") + keccak256(b"ServiceRegistry").hex())
+    addr = cfg["orchestrator"]["eth_address"].lower().removeprefix("0x").rjust(64, "0")
+    raw = env.eth_call(rpc, "0x" + sr[-40:], _selector("getServiceURI(address)") + addr) if sr else None
+    try:
+        b = bytes.fromhex(raw[2:])
+        uri = b[64:64 + int.from_bytes(b[32:64], "big")].decode()
+    except (TypeError, ValueError, IndexError):
+        return Result("chain.service_uri", False, "could not read the on-chain service URI", warn=True)
+    host = cfg["orchestrator"]["host"]
+    same = uri.split("/")[2].split(":")[0] == host if "://" in uri else False
+    return Result("chain.service_uri", True, f"on-chain service URI is {uri or '(empty)'}" + ("" if same else f", not https://{host}"), warn=not same)
+
+
 def _discovery_apps(body: str) -> list[dict]:
     try:
         doc = json.loads(body)
@@ -311,7 +330,7 @@ def run_checks(env: Env, cfg: dict) -> list[Result]:
     results = [check_docker(env, cfg), check_disk(env, cfg), check_config(env, cfg)]
     if config_problems(cfg):
         return results
-    results += [check_running(env, cfg), check_public_ip(env, cfg), check_tls(env, cfg), check_keystore(env, cfg), check_active(env, cfg)]
+    results += [check_running(env, cfg), check_public_ip(env, cfg), check_tls(env, cfg), check_keystore(env, cfg), check_active(env, cfg), check_service_uri(env, cfg)]
     results += check_runners(env, cfg)
     results.append(check_contract(env, cfg) if results[3].ok else Result("cap.contract", False, "skipped: the stack is not running"))
     return results

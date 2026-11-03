@@ -10,6 +10,7 @@
     "net.tls": {"stage": "node", "blocking": true, "bar": "https://<host> presents a valid certificate", "why": "the network only talks to you over TLS", "fix": ["Open ports 80 and 443 so Caddy can get a certificate.", "Check `docker compose logs caddy`."]},
     "chain.keystore": {"stage": "chain", "blocking": true, "bar": "the wallet keystore, password and RPC URL files exist and the keystore address equals eth_address", "why": "the node signs and receives payments with this key", "fix": ["Put your keystore at secrets/wallet-keystore, its password at secrets/wallet-password and an Arbitrum One RPC URL at secrets/arbitrum-rpc-url (all mode 600).", "Never paste the key or password into chat or a ticket."]},
     "chain.active": {"stage": "chain", "blocking": true, "bar": "eth_address is in the active orchestrator set this round", "why": "paid work only goes to active orchestrators", "fix": ["Bond enough LPT to enter the active set, set your service URI to https://<host>, and call reward.", "Wait for the next round, then run `lpo up` again."]},
+    "chain.service_uri": {"stage": "chain", "blocking": false, "bar": "the on-chain service URI is https://<host>, or you know why it is not", "why": "chain-based discovery finds you at the on-chain URI; a different URI is fine for a second host but changing it moves all on-chain traffic", "fix": ["If this machine should be your main host, set the service URI to https://<host> on Arbitrum One.", "If another host already serves this address, leave the URI alone; this host is reached through the network's orchestrator list."]},
     "runner.listed": {"stage": "runners", "blocking": true, "bar": "/discovery lists every app in lpo.yaml", "why": "the network only sends jobs to apps your node lists", "fix": ["Check the runner logs: `docker compose logs --tail 50 hyperframes`.", "Run `lpo up` again."]},
     "runner.host": {"stage": "runners", "blocking": true, "bar": "every runner URL in /discovery is on your host", "why": "selection refuses runners on another host", "fix": ["Keep runners behind the Kit's Caddy; do not list other hosts."]},
     "manifest.match": {"stage": "runners", "blocking": true, "bar": "lpo.yaml and /discovery agree on app, mode and price", "why": "a mismatch means the published price is not what you charge", "fix": ["Run `lpo up` to re-render and restart."]},
@@ -20,6 +21,6 @@
     "min_free_disk_gib": 20,
     "max_price_usd": {"fixed": 1.0, "hour": 5.0},
     "arbitrum_controller": "0xD8E8328501E9645d16Cf49539efC04f734606ee4",
-    "policy_note": "Local defaults until the registry serves /v1/policy. arbitrum_controller is unverified until the pilot's step H3 confirms it."
+    "policy_note": "Local defaults until the registry serves /v1/policy. arbitrum_controller verified 2026-11-02 (resolves BondingManager 0x35bc…3e40)."
   }
 }
