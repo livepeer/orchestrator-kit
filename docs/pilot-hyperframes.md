@@ -4,7 +4,7 @@ The first real end-to-end run. Every step records its time, every manual action 
 
 | Step | What | Who |
 |---|---|---|
-| H0 | VM in GCP project `livepeer-agent` (outside the fleet): `e2-standard-8`, Ubuntu 24.04, public IP, ports 80/443 open, label `purpose=lpa-252-pilot` | Claude, after the owner's go |
+| H0 | VM in GCP project `naap-orchestrator` (outside the fleet; `livepeer-agent` has no billing): `e2-standard-8`, Ubuntu 24.04, public IP, ports 80/443 open, label `purpose=lpa-252-pilot` | Claude, after the owner's go |
 | H1 | Install Docker; clone this repo; `pip install -e .`; write `lpo.yaml`; `lpo up` (renders, waits for the wallet files) | Claude |
 | H2 | Owner copies the keystore, password and RPC URL into `~/node/secrets/` (mode 600). Claude never handles them | owner |
 | H3 | On Arbitrum One: bond, activate, set service URI `https://<host>`, call reward. Claude prepares the steps; the owner signs | owner |
