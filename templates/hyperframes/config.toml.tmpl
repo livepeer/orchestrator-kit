@@ -1,0 +1,13 @@
+Listen = "0.0.0.0:8935"
+ServiceURL = "https://${HOST}"
+RunnerServiceURL = "http://caddy:8080"
+BootstrapSecretFile = "/run/secrets/runner-bootstrap"
+RunnerGrants = ["172.19.0.13:8993"]
+
+Network = "arbitrum-one-mainnet"
+OrchestratorAddress = "${ETH_ADDRESS}"
+KeystoreFile = "/run/secrets/wallet-keystore"
+KeystorePasswordFile = "/run/secrets/wallet-password"
+RPCURLFile = "/run/secrets/arbitrum-rpc-url"
+TicketFaceValue = "${TICKET_FACE_VALUE}"
+TicketWinProb = "${TICKET_WIN_PROB}"

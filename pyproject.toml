@@ -1,0 +1,18 @@
+[project]
+name = "lpo"
+version = "0.1.0"
+description = "Get a Livepeer orchestrator from a bare machine to paid traffic"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6"]
+
+[project.scripts]
+lpo = "lpo.cli:main"
+
+[tool.setuptools]
+packages = ["lpo"]
+
+[tool.setuptools.package-data]
+lpo = ["vocabulary.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["lpo/tests", "runners/hyperframes"]

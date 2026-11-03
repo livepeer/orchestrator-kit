@@ -1,0 +1,12 @@
+# One file describes your node. `lpo init` renders the Kit from it; `lpo doctor` checks it.
+orchestrator:
+  host: gpu1.example.org          # public DNS name pointing at this machine
+  eth_address: "0x0000000000000000000000000000000000000000"
+  contact: ops@example.org
+  region: us-west
+capabilities:
+  - app: community/hyperframes     # runner app name
+    mode: single-shot
+    price_info: {price: 0.008, currency: usd, unit: fixed}
+    capacity: 2
+    contract: kit:hyperframes.render
