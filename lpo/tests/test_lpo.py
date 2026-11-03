@@ -160,3 +160,74 @@ def test_service_uri_elsewhere_is_a_warning_not_a_block(node, capsys):
     su = next(c for c in js["checks"] if c["id"] == "chain.service_uri")
     assert su["ok"] and su["warn"] and "livebit.ca" in su["measured"] and js["stage"] == "published"
     assert "## ! chain.service_uri" in md
+
+
+NEW = "0x2222222222222222222222222222222222222222"
+
+
+class ChainEnv(FakeEnv):
+    """Fakes `docker run ... livepeer-chain` and a full 3-seat pool whose lowest stake is 610.2 LPT."""
+
+    def __init__(self, workdir, **kw):
+        super().__init__(workdir, **kw)
+        self.calls = []
+
+    def run(self, *args, input=None, timeout=60):
+        if args[:2] == ("docker", "run"):
+            self.calls.append(args)
+            if "create" in args:
+                (self.workdir / "secrets" / "wallet-keystore").write_text(json.dumps({"address": NEW[2:], "crypto": {}}))
+            return 0, "simulated: approve, bond, transcoder, setServiceURI" if "register" in args else "created"
+        return super().run(*args, input=input, timeout=timeout)
+
+    def eth_call(self, rpc, to, data):
+        pool = ["0x" + "a" * 40, "0x" + "b" * 40, "0x" + "c" * 40]
+        stakes = {pool[0][2:]: 9000, pool[1][2:]: 2000, pool[2][2:]: 610.2}
+        word = lambda n: "0x" + int(n).to_bytes(32, "big").hex()
+        if data.startswith(cli._selector("getTranscoderPoolSize()")) or data.startswith(cli._selector("getTranscoderPoolMaxSize()")):
+            return word(3)
+        if data.startswith(cli._selector("getFirstTranscoderInPool()")):
+            return "0x" + pool[0][2:].rjust(64, "0")
+        if data.startswith(cli._selector("getNextTranscoderInPool(address)")):
+            i = [p[2:] for p in pool].index(data[-40:])
+            return "0x" + (pool[i + 1][2:] if i + 1 < len(pool) else "0" * 40).rjust(64, "0")
+        if data.startswith(cli._selector("transcoderTotalStake(address)")):
+            return word(int(stakes[data[-40:]] * 10**18))
+        return super().eth_call(rpc, to, data)
+
+
+def answers(*values):
+    it = iter(values)
+    return lambda prompt: next(it)
+
+
+def test_wallet_creates_private_files_and_fills_the_address(tmp_path, capsys):
+    (tmp_path / "lpo.yaml").write_text(LPO_YAML.replace(ADDR, "0x" + "0" * 40))
+    env = ChainEnv(tmp_path)
+    assert cli.cmd_wallet(tmp_path, env, ask=answers("correct horse battery", "correct horse battery", "https://arb1.example/rpc")) == 0
+    sd = tmp_path / "secrets"
+    for f in cli.SECRET_FILES:
+        assert (sd / f).stat().st_mode & 0o077 == 0, f
+    assert cli.load_config(tmp_path)["orchestrator"]["eth_address"] == NEW
+    out = capsys.readouterr().out
+    assert NEW in out and "more than 610.2 LPT" in out and "correct horse" not in out
+    assert any(a.endswith("/s") for a in env.calls[0])  # writable mount only for create
+
+
+def test_wallet_never_replaces_one_and_rejects_weak_passwords(node, tmp_path):
+    assert cli.cmd_wallet(node, ChainEnv(node)) == 1
+    (tmp_path / "w").mkdir()
+    (tmp_path / "w" / "lpo.yaml").write_text(LPO_YAML)
+    assert cli.cmd_wallet(tmp_path / "w", ChainEnv(tmp_path / "w"), ask=answers("short", "short")) == 1
+    assert not (tmp_path / "w" / "secrets" / "wallet-password").exists()
+
+
+def test_register_is_a_dry_run_unless_submit_and_checks_the_stake(node, capsys):
+    env = ChainEnv(node)
+    assert cli.cmd_register(node, "500", False, "100", "100", env) == 1 and not env.calls
+    assert "bond more than 610.2" in capsys.readouterr().out
+    assert cli.cmd_register(node, "800", False, "100", "100", env) == 0
+    args = env.calls[-1]
+    assert "--submit" not in args and "https://node.example.org" in args and args[args.index("-v") + 1].endswith(":ro")
+    assert "Dry run only" in capsys.readouterr().out
+    assert cli.cmd_register(node, "800", True, "100", "100", env) == 0 and "--submit" in env.calls[-1]

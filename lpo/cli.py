@@ -3,6 +3,8 @@
     lpo up       render the Kit from lpo.yaml, start it, run doctor (re-run after every fix)
     lpo doctor   check readiness and write report.md + report.json
     lpo init     render the Kit only
+    lpo wallet   create a new wallet on this machine (you type the password; lpo never prints the key)
+    lpo register bond LPT and register on Arbitrum One (dry run unless --submit; you sign)
 
 Exit codes: 0 ready, 1 blocking failures, 2 warnings only, 3 lpo itself could not run.
 """
@@ -10,6 +12,7 @@ Exit codes: 0 ready, 1 blocking failures, 2 warnings only, 3 lpo itself could no
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import re
@@ -429,6 +432,100 @@ def cmd_init(workdir: Path) -> int:
     return 0
 
 
+def _write_private(path: Path, text: str) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+
+
+def chain(env: Env, *args: str, writable: bool = False) -> tuple[int, str]:
+    """Run the node image's own `livepeer-chain` with secrets/ mounted, so keys stay on this machine."""
+    import yaml
+
+    image = yaml.safe_load((KIT_ROOT / "templates" / "hyperframes" / "compose.yaml").read_text())["services"]["orchestrator"]["image"]
+    mount = f"{env.workdir / 'secrets'}:/s" + ("" if writable else ":ro")
+    return env.run("docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "-v", mount,
+                   "--entrypoint", "livepeer-chain", image, *args, "-c", "", timeout=900)
+
+
+def pool_floor(env: Env, rpc: str) -> tuple[int, int, float] | None:
+    """(pool size, max size, lowest stake in LPT) of the active set, walking the BondingManager pool."""
+    bm = env.eth_call(rpc, VOCAB["policy"]["arbitrum_controller"], _selector("getContract(bytes32)") + keccak256(b"BondingManager").hex())
+    if not bm or int(bm, 16) == 0:
+        return None
+    bm = "0x" + bm[-40:]
+    size, cap = (int(env.eth_call(rpc, bm, _selector(f)) or "0x0", 16) for f in ("getTranscoderPoolSize()", "getTranscoderPoolMaxSize()"))
+    t, lowest = env.eth_call(rpc, bm, _selector("getFirstTranscoderInPool()")), 0.0
+    while t and int(t, 16):
+        arg = t[-40:].rjust(64, "0")
+        lowest = int(env.eth_call(rpc, bm, _selector("transcoderTotalStake(address)") + arg) or "0x0", 16) / 1e18
+        t = env.eth_call(rpc, bm, _selector("getNextTranscoderInPool(address)") + arg)
+    return size, cap, lowest
+
+
+def cmd_wallet(workdir: Path, env: Env | None = None, ask=getpass.getpass) -> int:
+    env = env or Env(workdir)
+    sd = workdir / "secrets"
+    sd.mkdir(mode=0o700, exist_ok=True)
+    if (sd / "wallet-keystore").exists():
+        print("secrets/wallet-keystore already exists; lpo never replaces a wallet.")
+        return 1
+    if not (sd / "wallet-password").exists():
+        pw = ask("New wallet password (not echoed): ")
+        if len(pw) < 12 or pw != ask("Again: "):
+            print("Passwords must match and be at least 12 characters.")
+            return 1
+        _write_private(sd / "wallet-password", pw)
+    if not (sd / "arbitrum-rpc-url").exists():
+        rpc = ask("Arbitrum One RPC URL (not echoed): ").strip()
+        if not rpc.startswith("https://"):
+            print("The RPC URL must start with https://")
+            return 1
+        _write_private(sd / "arbitrum-rpc-url", rpc)
+    code, out = chain(env, "account", "create", "--keystore-file", "/s/wallet-keystore",
+                      "--keystore-password-file", "/s/wallet-password", writable=True)
+    if code != 0 or not (sd / "wallet-keystore").exists():
+        print(redact(out.strip()[-1500:]) or "livepeer-chain account create failed")
+        return 3
+    (sd / "wallet-keystore").chmod(0o600)
+    addr = "0x" + json.loads((sd / "wallet-keystore").read_text())["address"].lower().removeprefix("0x")
+    yml = workdir / "lpo.yaml"
+    yml.write_text(re.sub(r'(eth_address:\s*)"?0x[0-9a-fA-F]{40}"?', f'\\g<1>"{addr}"', yml.read_text(), count=1))
+    floor = pool_floor(env, (sd / "arbitrum-rpc-url").read_text().strip())
+    need = f"more than {floor[2]:,.1f} LPT (lowest stake in the full active set now)" if floor and floor[0] >= floor[1] else "any LPT (the active set has room)"
+    print(f"New wallet {addr}, saved in secrets/ (mode 600). Back up secrets/wallet-keystore and the password offline.\n"
+          f"Send it on Arbitrum One: about 0.01 ETH for gas, and {need}.\n"
+          "Then run `lpo register --lpt <amount>` (a dry run), and again with --submit.")
+    return 0
+
+
+def cmd_register(workdir: Path, lpt: str, submit: bool, reward_cut: str, fee_cut: str, env: Env | None = None) -> int:
+    env = env or Env(workdir)
+    cfg = load_config(workdir)
+    ks = check_keystore(env, cfg)
+    if not ks.ok:
+        print(f"Wallet not ready: {ks.measured}. Run `lpo wallet` first.")
+        return 1
+    floor = pool_floor(env, (workdir / "secrets" / "arbitrum-rpc-url").read_text().strip())
+    if floor:
+        size, cap, lowest = floor
+        print(f"Active set {size}/{cap}; lowest stake {lowest:,.1f} LPT.")
+        if size >= cap and lpt != "all" and float(lpt) <= lowest:
+            print(f"{lpt} LPT is not enough to enter the full active set; bond more than {lowest:,.1f}.")
+            return 1
+    host = cfg["orchestrator"]["host"]
+    code, out = chain(env, "orchestrator", "register", "--amount", lpt, "--reward-cut", reward_cut, "--fee-cut", fee_cut,
+                      "--service-uri", f"https://{host}", "--keystore-file", "/s/wallet-keystore",
+                      "--keystore-password-file", "/s/wallet-password", "--rpc-url-file", "/s/arbitrum-rpc-url",
+                      *(["--submit"] if submit else []))
+    print(redact(out.strip()[-3000:]))
+    if code == 0 and not submit:
+        print("Dry run only: nothing was sent. Add --submit to sign and broadcast with your wallet.")
+    elif code == 0:
+        print("Registered. You join the active set at the start of the next round (about a day); then run `lpo up`.")
+    return 0 if code == 0 else 3
+
+
 def cmd_up(workdir: Path) -> int:
     if cmd_init(workdir) != 0:
         return 1
@@ -445,12 +542,20 @@ def cmd_up(workdir: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lpo", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["up", "doctor", "init"])
+    parser.add_argument("command", choices=["up", "doctor", "init", "wallet", "register"])
     parser.add_argument("--dir", default=os.getcwd(), help="node directory holding lpo.yaml (default: current)")
+    parser.add_argument("--lpt", help="register: LPT to bond (a number or all)")
+    parser.add_argument("--reward-cut", default="100", help="register: reward commission %% you keep (default 100)")
+    parser.add_argument("--fee-cut", default="100", help="register: fee commission %% you keep (default 100)")
+    parser.add_argument("--submit", action="store_true", help="register: sign and broadcast (default: dry run)")
     args = parser.parse_args(argv)
     workdir = Path(args.dir).resolve()
     try:
-        return {"up": cmd_up, "doctor": cmd_doctor, "init": cmd_init}[args.command](workdir)
+        if args.command == "register":
+            if not args.lpt:
+                parser.error("register needs --lpt")
+            return cmd_register(workdir, args.lpt, args.submit, args.reward_cut, args.fee_cut)
+        return {"up": cmd_up, "doctor": cmd_doctor, "init": cmd_init, "wallet": cmd_wallet}[args.command](workdir)
     except FileNotFoundError as exc:
         print(str(exc))
         return 3
