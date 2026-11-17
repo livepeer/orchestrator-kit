@@ -65,3 +65,12 @@ def test_no_image_is_unpinned():
     compose = yaml.safe_load((HERE / "compose.yaml").read_text())
     for name, service in compose["services"].items():
         assert "@sha256:" in service["image"] and "HYPERFRAMES_DIGEST" not in service["image"], name
+
+
+def test_output_bucket_keeps_results_at_least_as_long_as_the_fleet():
+    # LPA-527: a hand-set 2-day rule deleted users' results before the 7-day window the Beta Terms
+    # promise. The rule lives here now, and matches the fleet tool-output bucket (30 days).
+    rules = json.loads((HERE / "lifecycle.json").read_text())["rule"]
+    deletes = [r for r in rules if r["action"]["type"] == "Delete"]
+    assert deletes and all(set(r["condition"]) == {"age"} for r in deletes), rules
+    assert min(r["condition"]["age"] for r in deletes) >= 30, rules
