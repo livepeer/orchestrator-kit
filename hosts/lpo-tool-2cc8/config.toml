@@ -1,0 +1,13 @@
+Listen = "0.0.0.0:8935"
+ServiceURL = "https://136-118-245-156.sslip.io"
+RunnerServiceURL = "http://caddy:8080"
+BootstrapSecretFile = "/run/secrets/runner-bootstrap"
+RunnerGrants = ["172.19.0.10:9090"]
+
+Network = "arbitrum-one-mainnet"
+OrchestratorAddress = "0x2cC8AeC211Fdc372c0F7E4d1add1675733381328"
+KeystoreFile = "/run/secrets/wallet-keystore"
+KeystorePasswordFile = "/run/secrets/wallet-password"
+RPCURLFile = "/run/secrets/arbitrum-rpc-url"
+TicketFaceValue = "30000000000000"
+TicketWinProb = "771947261582107969490473233391252719021799897770937093596383893386087530932"

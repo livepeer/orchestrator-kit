@@ -1,0 +1,21 @@
+{
+  "caddy_ip": "172.19.0.3",
+  "domain": "136-118-245-156.sslip.io",
+  "host_class": "tool",
+  "metadata_http_allow": [
+    "172.19.0.10"
+  ],
+  "node_ip": "172.19.0.2",
+  "published_ports": [
+    80,
+    443,
+    9090
+  ],
+  "runners": {
+    "tool-app": {
+      "ip": "172.19.0.10",
+      "port": 9090
+    }
+  },
+  "subnet": "172.19.0.0/24"
+}

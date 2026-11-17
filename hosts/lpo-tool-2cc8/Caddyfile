@@ -1,0 +1,32 @@
+136-118-245-156.sslip.io {
+    @external path /discovery /apps/* /run/* /ai/trickle/*
+    handle @external {
+        reverse_proxy http://orchestrator:8935
+    }
+    handle {
+        respond "Not Found" 404
+    }
+}
+
+http://:8080 {
+    @runner path /runner/* /ai/trickle/* /runners/heartbeat /runners/*/unregister
+    handle @runner {
+        reverse_proxy http://orchestrator:8935
+    }
+    handle {
+        respond "Not Found" 404
+    }
+}
+
+http://:9090 {
+    @capabilities {
+        method GET
+        path /capabilities
+    }
+    handle @capabilities {
+        reverse_proxy http://tool-app:9090
+    }
+    handle {
+        respond "Not Found" 404
+    }
+}

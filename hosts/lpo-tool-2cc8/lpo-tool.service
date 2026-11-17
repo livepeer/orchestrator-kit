@@ -1,0 +1,19 @@
+[Unit]
+Description=lpo-tool-2cc8 compose stack (from the files cached in /opt/lpo/host)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/lpo/host
+ExecStart=/usr/bin/docker compose up -d --wait --no-build --pull never
+ExecStop=/usr/bin/docker compose stop
+TimeoutStartSec=900
+# Compose gives each container up to 120 s to stop (render/console.py stop_grace_period) and Compute
+# Engine gives the guest up to 120 s to shut down; systemd's default of 90 s would kill the stop early.
+TimeoutStopSec=115
+
+[Install]
+WantedBy=multi-user.target
