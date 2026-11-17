@@ -1,0 +1,162 @@
+name: fleet
+services:
+  orchestrator:
+    image: docker.io/livepeer/node:v1.0.5@sha256:511783baf44d53bd8d2aef92e80574e52d95e9434442f530644006f48605cbf4
+    command:
+    - orchestrator
+    - --config
+    - /etc/livepeer/config.toml
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '3'
+    volumes:
+    - ./config.toml:/etc/livepeer/config.toml:ro
+    - ./secrets/runner-bootstrap:/run/secrets/runner-bootstrap:ro
+    - ./secrets/wallet-keystore:/run/secrets/wallet-keystore:ro
+    - ./secrets/wallet-password:/run/secrets/wallet-password:ro
+    - ./secrets/arbitrum-rpc-url:/run/secrets/arbitrum-rpc-url:ro
+    - orchestrator_state:/home/livepeer/.lpData
+    networks:
+      fleet:
+        ipv4_address: 172.19.0.2
+    healthcheck:
+      test:
+      - CMD
+      - bash
+      - -ec
+      - exec 3<>/dev/tcp/127.0.0.1/8936; printf 'GET /readyz HTTP/1.0\r\n\r\n' >&3; head -n 1 <&3 | grep -q ' 200 '
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+  caddy:
+    image: docker.io/library/caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+    cap_drop:
+    - ALL
+    cap_add:
+    - NET_BIND_SERVICE
+    security_opt:
+    - no-new-privileges:true
+    read_only: true
+    tmpfs:
+    - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '3'
+    ports:
+    - 80:80
+    - 443:443
+    - 9090:9090
+    volumes:
+    - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    - caddy_data:/data
+    - caddy_config:/config
+    networks:
+      fleet:
+        ipv4_address: 172.19.0.3
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -S -O /dev/null http://127.0.0.1:8080/runners/heartbeat 2>&1 | grep -q '405 Method Not Allowed'
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  tool-app:
+    image: us-west1-docker.pkg.dev/naap-orchestrator/lpo-tool/tool-app-priced@sha256:22ebeee81dbfb57cfe01fb9c855aaf8a8b99618d2059ade8b8ecaab428f29561
+    environment:
+      ORCH_URL: http://caddy:8080
+      ORCH_SECRET: ${ORCH_SECRET:?ORCH_SECRET is required}
+      ADAPTER_URL: http://172.19.0.10:9090
+      CAPABILITIES_JSON: '[{"name":"ffmpeg-audio-mix","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-audio-mix","capacity":4,"price_per_unit":1,"description":"Mix 1-8 audio tracks with per-track gain & delay","unit_kind":"call","display_unit":"call","display_price_usd":0.009524,"price_usd":0.009524},{"name":"ffmpeg-burn-subtitles","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-burn-subtitles","capacity":4,"price_per_unit":1,"description":"Burn .srt or inline cues into the video","unit_kind":"call","display_unit":"call","display_price_usd":0.014286,"price_usd":0.014286},{"name":"ffmpeg-colorgrade","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-colorgrade","capacity":4,"price_per_unit":1,"description":"Apply colour grading / LUT to a clip","unit_kind":"call","display_unit":"call","display_price_usd":0.004762,"price_usd":0.004762},{"name":"ffmpeg-concat","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-concat","capacity":4,"price_per_unit":1,"description":"Stitch 2-30 clips with optional transitions","unit_kind":"call","display_unit":"call","display_price_usd":0.014286,"price_usd":0.014286},{"name":"ffmpeg-denoise","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-denoise","capacity":4,"price_per_unit":1,"description":"Denoise video or audio","unit_kind":"call","display_unit":"call","display_price_usd":0.004762,"price_usd":0.004762},{"name":"ffmpeg-export","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-export","capacity":4,"price_per_unit":1,"description":"Re-encode for platform spec (ig/tiktok/yt/720p/1080p/mp3/aac/wav)","unit_kind":"call","display_unit":"call","display_price_usd":0.007143,"price_usd":0.007143},{"name":"ffmpeg-grid","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-grid","capacity":4,"price_per_unit":1,"description":"Arrange 2-16 clips/images in a rows x cols grid","unit_kind":"call","display_unit":"call","display_price_usd":0.004762,"price_usd":0.004762},{"name":"ffmpeg-kenburns","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-kenburns","capacity":4,"price_per_unit":1,"description":"Ken Burns pan/zoom from a still image","unit_kind":"call","display_unit":"call","display_price_usd":0.002381,"price_usd":0.002381},{"name":"ffmpeg-loop","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-loop","capacity":4,"price_per_unit":1,"description":"Repeat a clip N times or to a target duration","unit_kind":"call","display_unit":"call","display_price_usd":0.009524,"price_usd":0.009524},{"name":"ffmpeg-mux","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-mux","capacity":4,"price_per_unit":1,"description":"Mux audio onto a video (replace or mix); final compose","unit_kind":"call","display_unit":"call","display_price_usd":0.009524,"price_usd":0.009524},{"name":"ffmpeg-overlay","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-overlay","capacity":4,"price_per_unit":1,"description":"Overlay logo/watermark/PiP onto a base video","unit_kind":"call","display_unit":"call","display_price_usd":0.004762,"price_usd":0.004762},{"name":"ffmpeg-reframe","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-reframe","capacity":4,"price_per_unit":1,"description":"Reframe aspect ratio with padding or crop","unit_kind":"call","display_unit":"call","display_price_usd":0.002381,"price_usd":0.002381},{"name":"ffmpeg-silence-cut","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-silence-cut","capacity":4,"price_per_unit":1,"description":"Remove silent segments from a clip","unit_kind":"call","display_unit":"call","display_price_usd":0.019048,"price_usd":0.019048},{"name":"ffmpeg-stabilize","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-stabilize","capacity":4,"price_per_unit":1,"description":"Stabilise shaky footage","unit_kind":"call","display_unit":"call","display_price_usd":0.005714,"price_usd":0.005714},{"name":"ffmpeg-trim","container":"tool-ffmpeg","endpoint":"/run/ffmpeg-trim","capacity":4,"price_per_unit":1,"description":"Trim a clip to a window or duration","unit_kind":"call","display_unit":"call","display_price_usd":0.002381,"price_usd":0.002381},{"name":"ffprobe-info","container":"tool-ffmpeg","endpoint":"/run/ffprobe-info","capacity":4,"price_per_unit":1,"description":"Probe a video/audio file: duration, dimensions, fps, codecs","unit_kind":"call","display_unit":"call","display_price_usd":0.000476,"price_usd":0.000476},{"name":"hyperframes-render","container":"tool-hyperframes","endpoint":"/run/hyperframes-render","capacity":2,"price_per_unit":1,"description":"Hyperframes render","unit_kind":"call","display_unit":"call","display_price_usd":0.015,"price_usd":0.015}]'
+      UPLOAD_STRATEGY: gcs
+      GCS_BUCKET: ${GCS_BUCKET:?GCS_BUCKET is required}
+      GOOGLE_CLOUD_PROJECT: naap-orchestrator
+      SHARED_VOLUME: /shared
+      LOG_LEVEL: INFO
+      LR_TOOL_PRICE_USD: '0.015'
+      LR_TOOL_PRICES_JSON: '{"ffmpeg-audio-mix":0.009524,"ffmpeg-burn-subtitles":0.014286,"ffmpeg-colorgrade":0.004762,"ffmpeg-concat":0.014286,"ffmpeg-denoise":0.004762,"ffmpeg-export":0.007143,"ffmpeg-grid":0.004762,"ffmpeg-kenburns":0.002381,"ffmpeg-loop":0.009524,"ffmpeg-mux":0.009524,"ffmpeg-overlay":0.004762,"ffmpeg-reframe":0.002381,"ffmpeg-silence-cut":0.019048,"ffmpeg-stabilize":0.005714,"ffmpeg-trim":0.002381,"ffprobe-info":0.000476}'
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '3'
+    cpus: 0.5
+    mem_limit: 512m
+    volumes:
+    - shared:/shared
+    depends_on:
+      caddy:
+        condition: service_healthy
+    networks:
+      fleet:
+        ipv4_address: 172.19.0.10
+  tool-ffmpeg:
+    image: us-west1-docker.pkg.dev/naap-orchestrator/lpo-tool/tool-ffmpeg@sha256:885289bf2ba47fcb4a8ea7e4fe87f55c3a79c895128f539b82cdd83e68053ded
+    profiles:
+    - media
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '3'
+    cpus: 3.0
+    mem_limit: 4g
+    pids_limit: 512
+    volumes:
+    - shared:/shared
+    networks:
+    - fleet
+  tool-hyperframes:
+    image: us-west1-docker.pkg.dev/naap-orchestrator/lpo-tool/tool-hyperframes@sha256:c716690c18d9c159ca9f53f1d965af7e7168c4a7eb21df7a7cc31df2567219d2
+    profiles:
+    - hyperframes
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '3'
+    cpus: 2.0
+    mem_limit: 2g
+    pids_limit: 1024
+    volumes:
+    - shared:/shared
+    networks:
+    - fleet
+networks:
+  fleet:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.19.0.0/24
+        ip_range: 172.19.0.128/25
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+  orchestrator_state: {}
+  shared: {}
