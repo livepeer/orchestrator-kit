@@ -25,7 +25,7 @@ An independent tool orchestrator for 0x2cC8…1328 that serves ffmpeg and HyperF
 | Image | Source |
 |---|---|
 | `livepeer/node` v1.0.5, Caddy 2.11.7 | Docker Hub, the fleet's digests |
-| `tool-ffmpeg@sha256:38b02a95…` | the agent-fleet staging pin, copied server-side with the same digest |
+| `tool-ffmpeg@sha256:885289bf…` | the agent-fleet prod pin (simple-infra `1981c89a`, release 2026.11.16-1945Z), copied with the same digest; was `38b02a95…` until 2026-11-16 (LPA-516) |
 | `tool-app-priced@sha256:22ebeee8…` | the agent-fleet staging `tool-app@sha256:7dccec1a…` plus one file (`../../images/tool-app-priced`) |
 | `tool-hyperframes` | `../../images/tool-hyperframes`: simple-infra `b7fa98e^` source, fleet image style |
 

@@ -107,7 +107,7 @@ services:
       fleet:
         ipv4_address: 172.19.0.10
   tool-ffmpeg:
-    image: us-west1-docker.pkg.dev/naap-orchestrator/lpo-tool/tool-ffmpeg@sha256:38b02a9584696566b404f842d5d4cd0fed21adf0caa905edf3aa86309f2bf137
+    image: us-west1-docker.pkg.dev/naap-orchestrator/lpo-tool/tool-ffmpeg@sha256:885289bf2ba47fcb4a8ea7e4fe87f55c3a79c895128f539b82cdd83e68053ded
     profiles:
     - media
     cap_drop:

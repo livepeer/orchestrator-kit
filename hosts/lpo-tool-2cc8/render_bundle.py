@@ -48,7 +48,9 @@ PRICES_COMMIT = "cb13dbf"
 # the fleet's staging tool-app digest plus one file (../../images/tool-app-priced).
 IMAGES = {
     "tool-app": f"{REGISTRY}/tool-app-priced@sha256:22ebeee81dbfb57cfe01fb9c855aaf8a8b99618d2059ade8b8ecaab428f29561",
-    "tool-ffmpeg": f"{REGISTRY}/tool-ffmpeg@sha256:38b02a9584696566b404f842d5d4cd0fed21adf0caa905edf3aa86309f2bf137",
+    # tool-ffmpeg = agent-fleet prod pin (release 2026.11.16-1945Z, simple-infra 1981c89a), copied with
+    # the same digest (LPA-516). Was 38b02a95 (2026-11-05). Only the worker changes: uploads stay in tool-app.
+    "tool-ffmpeg": f"{REGISTRY}/tool-ffmpeg@sha256:885289bf2ba47fcb4a8ea7e4fe87f55c3a79c895128f539b82cdd83e68053ded",
     "tool-hyperframes": f"{REGISTRY}/tool-hyperframes@sha256:c716690c18d9c159ca9f53f1d965af7e7168c4a7eb21df7a7cc31df2567219d2",
 }
 
