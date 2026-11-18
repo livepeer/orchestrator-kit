@@ -1,0 +1,23 @@
+{$HOST} {
+	@node path /discovery /apps/* /run/* /ai/trickle/*
+	handle @node {
+		reverse_proxy http://orchestrator:8935
+	}
+	handle_path /outputs/* {
+		root * /srv/outputs
+		file_server
+	}
+	handle {
+		respond "Not Found" 404
+	}
+}
+
+http://:8080 {
+	@runner path /runner/* /ai/trickle/* /runners/heartbeat /runners/*/unregister
+	handle @runner {
+		reverse_proxy http://orchestrator:8935
+	}
+	handle {
+		respond "Not Found" 404
+	}
+}
