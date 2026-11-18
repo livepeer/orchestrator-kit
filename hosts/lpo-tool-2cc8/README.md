@@ -29,6 +29,12 @@ An independent tool orchestrator for 0x2cC8…1328 that serves ffmpeg and HyperF
 | `tool-app-priced@sha256:22ebeee8…` | the agent-fleet staging `tool-app@sha256:7dccec1a…` plus one file (`../../images/tool-app-priced`) |
 | `tool-hyperframes` | `../../images/tool-hyperframes`: simple-infra `b7fa98e^` source, fleet image style |
 
+## Storage
+
+- Results go to `gs://lpo-tool-2cc8-outputs` (project `naap-orchestrator`, US-WEST1): public read; writers `lpo-tool-2cc8@` and `lpo-tool-livebit@naap-orchestrator.iam.gserviceaccount.com`; 7-day soft delete.
+- **Delete rule: 30 days**, from `lifecycle.json`, the same as the fleet's tool-output bucket. It is not set at boot (the VM cannot administer the bucket): an operator runs `./apply_bucket_lifecycle.sh`, and `./apply_bucket_lifecycle.sh --check` reports drift. It was a hand-set 2 days until LPA-527, which deleted users' results before the 7-day window the Beta Terms promise.
+- From LPA-527 the fleet SDK copies every result into its own private bucket when it returns, so this bucket only matters for links stored before that release.
+
 ## Runtime (on the VM, `/opt/lpo/host`)
 
 - `secrets/`, mode 0400: `wallet-keystore`, `wallet-password` and `arbitrum-rpc-url` come from Secret Manager (`lpo-tool-2cc8-*`). `runner-bootstrap` is generated on the VM.
